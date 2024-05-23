@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Load Balancer Stack
+Parameters:
+  PublicSubnet1Id:
+    Type: String
+    Description: Public Subnet 1 ID
+  PublicSubnet2Id:
+    Type: String
+    Description: Public Subnet 2 ID
+  PrivateSubnet1Id:
+    Type: String
+    Description: Private Subnet 1 ID
+  PrivateSubnet2Id:
+    Type: String
+    Description: Private Subnet 2 ID
+  FrontendLoadBalancerSecurityGroupId:
+    Type: String
+    Description: Load Balancer Security Group ID
+  BackendLoadBalancerSecurityGroupId:
+    Type: String
+    Description: Backend Security Group ID
+Resources:
+  BackendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      TargetType: instance
+      Protocol: HTTP
+      Port: 80
+      VpcId: !ImportValue VpcId
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /
+      HealthCheckTimeoutSeconds: 5
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+  BackendLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      SecurityGroups:
+        - !Ref BackendLoadBalancerSecurityGroupId
+      Subnets:
+        - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
+      Scheme: internal
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+      Tags:
+        - Key: Name
+          Value: BackendLoadBalancer
+  BackendListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref BackendTargetGroup
+      LoadBalancerArn: !Ref BackendLoadBalancer
+      Port: 80
+      Protocol: HTTP
+  FrontendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      TargetType: instance
+      Protocol: HTTP
+      Port: 80
+      VpcId: !ImportValue VpcId
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /
+      HealthCheckTimeoutSeconds: 5
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      SecurityGroups:
+        - !Ref FrontendLoadBalancerSecurityGroupId
+      Subnets:
+        - !Ref PublicSubnet1Id
+        - !Ref PublicSubnet2Id
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+      Tags:
+        - Key: Name
+          Value: MyLoadBalancer
+  FrontendListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref FrontendTargetGroup
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+Outputs:
+  BackendLoadBalancerDNS:
+    Value: !GetAtt BackendLoadBalancer.DNSName
+    Export:
+      Name: BackendLoadBalancerDNS
+  LoadBalancerDNS:
+    Value: !GetAtt LoadBalancer.DNSName
+    Export:
+      Name: LoadBalancerDNS
+  BackendTargetGroupArn:
+    Value: !Ref BackendTargetGroup
+    Export:
+      Name: BackendTargetGroupArn
+  FrontendTargetGroupArn:
+    Value: !Ref FrontendTargetGroup
+    Export:
+      Name: FrontendTargetGroupArn

@@ -1,0 +1,90 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Security Groups Stack
+
+Parameters:
+  VpcId:
+    Type: String
+    Description: VPC ID
+
+Resources:
+  FrontendLoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow access to the FrontEnd load balancer
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: FrontendLoadBalancerSecurityGroup
+        
+  BackendLoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow access to the BackEnd load balancer
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref FrontendAutoScalingSecurityGroup
+      Tags:
+        - Key: Name
+          Value: BackendLoadBalancerSecurityGroup
+  
+  FrontendAutoScalingSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow access to backend servers
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref FrontendLoadBalancerSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: FrontendAutoScalingSecurityGroup
+
+  BackendAutoScalingSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow access to backend servers
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref BackendLoadBalancerSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: BackendAutoScalingSecurityGroup
+
+Outputs:
+  FrontendLoadBalancerSecurityGroupId:
+    Value: !Ref FrontendLoadBalancerSecurityGroup
+    Export:
+      Name: FrontendLoadBalancerSecurityGroup
+  BackendLoadBalancerSecurityGroupId:
+    Value: !Ref BackendLoadBalancerSecurityGroup
+    Export:
+      Name: BackendLoadBalancerSecurityGroup
+  FrontendAutoScalingSecurityGroupId:
+    Value: !Ref FrontendAutoScalingSecurityGroup
+    Export:
+      Name: FrontendAutoScalingSecurityGroup
+  BackendAutoScalingSecurityGroupId:
+    Value: !Ref BackendAutoScalingSecurityGroup
+    Export:
+      Name: BackendAutoScalingSecurityGroup

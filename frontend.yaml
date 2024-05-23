@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Frontend Stack
+
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: EC2 Key Pair
+  PublicSubnet1Id:
+    Type: String
+    Description: Public Subnet 1 ID
+  PublicSubnet2Id:
+    Type: String
+    Description: Public Subnet 2 ID
+  FrontendAutoScalingSecurityGroupId:
+    Type: String
+    Description: Load Balancer Security Group ID
+  FrontendTargetGroupArn:
+    Type: String
+    Description: Frontend Target Group ARN
+  BackendLoadBalancerDNS:
+    Type: String
+    Description: DNS name of the private load balancer
+
+Resources:
+  FrontendLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: ami-0cc9838aa7ab1dce7 # Specify your frontend AMI ID
+        InstanceType: t2.micro # Adjust instance type as needed
+        KeyName: !Ref KeyName
+        SecurityGroupIds:
+          - !Ref FrontendAutoScalingSecurityGroupId
+        UserData: !Base64
+          Fn::Sub: |
+            #!/bin/bash
+            yum update -y
+            yum install nginx -y
+            cat << EOF > /etc/nginx/nginx.conf
+            user nginx;
+            worker_processes auto;
+            error_log /var/log/nginx/error.log notice;
+            pid /run/nginx.pid;
+            # Load dynamic modules. See /usr/share/doc/nginx/README.dynamic.
+            include /usr/share/nginx/modules/*.conf;
+            events {
+                worker_connections 1024;
+            }
+            http {
+                access_log  /var/log/nginx/access.log;
+                sendfile            on;
+                tcp_nopush          on;
+                keepalive_timeout   65;
+                types_hash_max_size 4096;
+                include             /etc/nginx/mime.types;
+                default_type        application/octet-stream;
+                include /etc/nginx/conf.d/*.conf;
+                server {
+                    listen 80;
+                    server_name _;
+                    location / {
+                    proxy_pass http://${BackendLoadBalancerDNS}:80;
+                    }
+                }
+                }
+            EOF
+            service nginx start
+            chkconfig nginx on
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: FrontendInstance
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: FrontendInstance
+
+  FrontendAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet1Id
+        - !Ref PublicSubnet2Id
+      LaunchTemplate:
+        LaunchTemplateId: !Ref FrontendLaunchTemplate
+        Version: !GetAtt FrontendLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 3
+      DesiredCapacity: 1
+      TargetGroupARNs:
+        - !Ref FrontendTargetGroupArn
+      Tags:
+        - Key: Name
+          Value: FrontendASG
+          PropagateAtLaunch: true
+
+Outputs:
+  FrontendLaunchTemplateId:
+    Description: The ID of the launch template
+    Value: !Ref FrontendLaunchTemplate
+    Export:
+      Name: FrontendLaunchTemplateId
+
+  FrontendAutoScalingGroupName:
+    Description: The name of the Auto Scaling group
+    Value: !Ref FrontendAutoScalingGroup
+    Export:
+      Name: FrontendAutoScalingGroupName
