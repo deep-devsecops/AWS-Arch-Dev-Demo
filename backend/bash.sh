@@ -1,0 +1,138 @@
+#!/bin/bash
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Backend Stack
+
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: EC2 Key Pair
+  PrivateSubnet1Id:
+    Type: String
+    Description: Private Subnet 1 ID
+  PrivateSubnet2Id:
+    Type: String
+    Description: Private Subnet 2 ID
+  BackendAutoScalingSecurityGroupId:
+    Type: String
+    Description: Backend Security Group ID
+  BackendTargetGroupArn:
+    Type: String
+    Description: Backend Target Group ARN
+  BackendDeployedVersion:
+    Type: String
+    Description: Backend Deployed Version To Be Displayed on Backend Page!
+
+Resources:
+  BackendInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref BackendRole
+
+  BackendRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SSMAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:DescribeInstanceInformation
+                  - ssm:GetCommandInvocation
+                  - ssm:ListCommands
+                  - ssm:ListCommandInvocations
+                  - ssm:SendCommand
+                  - ssm:CreateDocument
+                  - ssm:GetDocument
+                  - ssm:DeleteDocument
+                  - ssm:UpdateDocument
+                  - ssm:ListDocuments
+                  - ssm:DescribeDocument
+                  - ssm:DescribeDocumentPermission
+                  - ssm:ModifyDocumentPermission
+                  - ssm:ListDocumentVersions
+                  - ec2messages:GetMessages
+                  - ec2messages:SendReply
+                  - ec2messages:FailMessage
+                  - ec2messages:DeleteMessage
+                  - ec2messages:AcknowledgeMessage
+                  - ec2messages:SendMessage
+                Resource: '*'
+
+  BackendLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: ami-0cc9838aa7ab1dce7 # Specify your backend AMI ID
+        InstanceType: t2.micro # Adjust instance type as needed
+        KeyName: !Ref KeyName
+        SecurityGroupIds:
+          - !Ref BackendAutoScalingSecurityGroupId
+        IamInstanceProfile:
+          Name: !Ref BackendInstanceProfile
+        UserData: !Base64
+          Fn::Sub: |
+            #!/bin/bash
+            yum update -y
+            yum install nginx -y
+            cat << EOF > /usr/share/nginx/html/index.html
+              Hello From Backend!!
+              You have Deployed Version ${BackendDeployedVersion};
+            EOF
+            service nginx start
+            chkconfig nginx on
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: BackendInstance
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: BackendInstance
+
+  BackendAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
+      LaunchTemplate:
+        LaunchTemplateId: !Ref BackendLaunchTemplate
+        Version: !GetAtt BackendLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 3
+      DesiredCapacity: 1
+      TargetGroupARNs:
+        - !Ref BackendTargetGroupArn
+      Tags:
+        - Key: Name
+          Value: BackendASG
+          PropagateAtLaunch: true
+
+Outputs:
+  BackendInstanceProfile:
+    Value: !Ref BackendInstanceProfile
+    Export:
+      Name: BackendInstanceProfile
+  BackendRole:
+    Value: !Ref BackendRole
+    Export:
+      Name: BackendRole
+  BackendLaunchTemplate:
+    Value: !Ref BackendLaunchTemplate
+    Export:
+      Name: BackendLaunchTemplate
+  BackendAutoScalingGroup:
+    Value: !Ref BackendAutoScalingGroup
+    Export:
+      Name: BackendAutoScalingGroup
