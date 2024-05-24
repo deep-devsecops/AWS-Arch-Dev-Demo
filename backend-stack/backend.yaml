@@ -20,6 +20,9 @@ Parameters:
   BackendDeployedVersion:
     Type: String
     Description: Backend Deployed Version To Be Displayed on Backend Page!
+  IndexHTMLContent:
+    Type: String
+    Description: The content to put into /usr/share/nginx/html/index.html
 
 Resources:
   BackendInstanceProfile:
@@ -83,10 +86,7 @@ Resources:
             #!/bin/bash
             yum update -y
             yum install nginx -y
-            cat << EOF > /usr/share/nginx/html/index.html
-              Hello From Backend!!
-              You have Deployed Version ${BackendDeployedVersion};
-            EOF
+            echo "${IndexHTMLContent}" > /usr/share/nginx/html/index.html
             service nginx start
             chkconfig nginx on
         TagSpecifications:
