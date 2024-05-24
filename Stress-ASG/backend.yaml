@@ -1,0 +1,202 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Backend Stack
+
+Parameters:
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: EC2 Key Pair
+  PrivateSubnet1Id:
+    Type: String
+    Description: Private Subnet 1 ID
+  PrivateSubnet2Id:
+    Type: String
+    Description: Private Subnet 2 ID
+  BackendAutoScalingSecurityGroupId:
+    Type: String
+    Description: Backend Security Group ID
+  BackendTargetGroupArn:
+    Type: String
+    Description: Backend Target Group ARN
+  BackendDeployedVersion:
+    Type: String
+    Description: Backend Deployed Version To Be Displayed on Backend Page!
+  IndexHTMLContent:
+    Type: String
+    Description: The content to put into /usr/share/nginx/html/index.html
+
+Resources:
+  BackendInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref BackendRole
+
+  BackendRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SSMAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:DescribeInstanceInformation
+                  - ssm:GetCommandInvocation
+                  - ssm:ListCommands
+                  - ssm:ListCommandInvocations
+                  - ssm:SendCommand
+                  - ssm:CreateDocument
+                  - ssm:GetDocument
+                  - ssm:DeleteDocument
+                  - ssm:UpdateDocument
+                  - ssm:ListDocuments
+                  - ssm:DescribeDocument
+                  - ssm:DescribeDocumentPermission
+                  - ssm:ModifyDocumentPermission
+                  - ssm:ListDocumentVersions
+                  - ec2messages:GetMessages
+                  - ec2messages:SendReply
+                  - ec2messages:FailMessage
+                  - ec2messages:DeleteMessage
+                  - ec2messages:AcknowledgeMessage
+                  - ec2messages:SendMessage
+                Resource: '*'
+
+  BackendLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: ami-0cc9838aa7ab1dce7 # Specify your backend AMI ID
+        InstanceType: t2.micro # Adjust instance type as needed
+        KeyName: !Ref KeyName
+        SecurityGroupIds:
+          - !Ref BackendAutoScalingSecurityGroupId
+        IamInstanceProfile:
+          Name: !Ref BackendInstanceProfile
+        UserData: !Base64
+          Fn::Sub: |
+            #!/bin/bash
+            yum update -y
+            yum install nginx -y
+            echo "${IndexHTMLContent}" > /usr/share/nginx/html/index.html
+            service nginx start
+            chkconfig nginx on
+
+            #Creating Stress :
+            echo "Installing and running CPU stress script..."
+            
+            # Install stress if not already installed
+            if ! command -v stress &> /dev/null
+            then
+                sudo yum install -y epel-release
+                sudo yum install -y stress
+            fi
+
+            # Stress the CPU
+            echo "Stressing the CPU..."
+            stress --cpu 1 --timeout 600 # Stress 1 CPU core for 10 minutes
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: BackendInstance
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: BackendInstance
+
+  BackendAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
+      LaunchTemplate:
+        LaunchTemplateId: !Ref BackendLaunchTemplate
+        Version: !GetAtt BackendLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 3
+      DesiredCapacity: 1
+      TargetGroupARNs:
+        - !Ref BackendTargetGroupArn
+      Tags:
+        - Key: Name
+          Value: BackendASG
+          PropagateAtLaunch: true
+
+  ScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref BackendAutoScalingGroup
+      PolicyType: SimpleScaling
+      AdjustmentType: ChangeInCapacity
+      ScalingAdjustment: 1
+
+  ScaleDownPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref BackendAutoScalingGroup
+      PolicyType: SimpleScaling
+      AdjustmentType: ChangeInCapacity
+      ScalingAdjustment: -1
+
+  CPUAlarmHigh:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: "Alarm if CPU utilization is greater than 60% for 5 minutes"
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref BackendAutoScalingGroup
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 60
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref ScaleUpPolicy
+
+  CPUAlarmLow:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: "Alarm if CPU utilization is less than 20% for 5 minutes"
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref BackendAutoScalingGroup
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 20
+      ComparisonOperator: LessThanThreshold
+      AlarmActions:
+        - !Ref ScaleDownPolicy
+
+Outputs:
+  BackendInstanceProfile:
+    Value: !Ref BackendInstanceProfile
+    Export:
+      Name: BackendInstanceProfile
+  BackendRole:
+    Value: !Ref BackendRole
+    Export:
+      Name: BackendRole
+  BackendLaunchTemplate:
+    Value: !Ref BackendLaunchTemplate
+    Export:
+      Name: BackendLaunchTemplate
+  BackendAutoScalingGroup:
+    Value: !Ref BackendAutoScalingGroup
+    Export:
+      Name: BackendAutoScalingGroup
+

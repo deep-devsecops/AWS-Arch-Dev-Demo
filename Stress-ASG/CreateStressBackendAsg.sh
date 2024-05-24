@@ -1,5 +1,3 @@
-#!/bin/bash
-
 aws cloudformation create-stack --stack-name BackendStack --template-body file://backend.yaml --parameters \
 ParameterKey=KeyName,ParameterValue=key \
 ParameterKey=PrivateSubnet1Id,ParameterValue=$(aws cloudformation describe-stacks --stack-name SubnetsStack --query "Stacks[0].Outputs[?OutputKey=='PrivateSubnet1Id'].OutputValue" --output text) \
@@ -7,5 +5,6 @@ ParameterKey=PrivateSubnet2Id,ParameterValue=$(aws cloudformation describe-stack
 ParameterKey=BackendAutoScalingSecurityGroupId,ParameterValue=$(aws cloudformation describe-stacks --stack-name SecurityGroupsStack --query "Stacks[0].Outputs[?OutputKey=='BackendAutoScalingSecurityGroupId'].OutputValue" --output text) \
 ParameterKey=BackendTargetGroupArn,ParameterValue=$(aws cloudformation describe-stacks --stack-name LoadBalancerStack --query "Stacks[0].Outputs[?OutputKey=='BackendTargetGroupArn'].OutputValue" --output text) \
 ParameterKey=BackendDeployedVersion,ParameterValue=1.0.0 \
-ParameterKey=IndexHTMLContent,ParameterValue="Hello From Backend!! You have Deployed Version 1.0.0!!" \
+ParameterKey=IndexHTMLContent,ParameterValue="Hello From Backend!! You have Deployed Stressed App now asg will spike up and more nodes bring up soon!!" \
 --capabilities CAPABILITY_IAM
+
