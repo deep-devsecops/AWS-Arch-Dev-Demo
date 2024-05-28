@@ -41,6 +41,8 @@ Resources:
             Principal:
               Service: ec2.amazonaws.com
             Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
       Policies:
         - PolicyName: SSMAccess
           PolicyDocument:
@@ -108,9 +110,9 @@ Resources:
       LaunchTemplate:
         LaunchTemplateId: !Ref BackendLaunchTemplate
         Version: !GetAtt BackendLaunchTemplate.LatestVersionNumber
-      MinSize: 1
+      MinSize: 2
       MaxSize: 3
-      DesiredCapacity: 1
+      DesiredCapacity: 2
       TargetGroupARNs:
         - !Ref BackendTargetGroupArn
       Tags:
