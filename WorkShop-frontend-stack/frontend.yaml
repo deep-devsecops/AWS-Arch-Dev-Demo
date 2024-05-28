@@ -5,12 +5,12 @@ Parameters:
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
     Description: EC2 Key Pair
-  PublicSubnet1Id:
+  PrivateSubnet1Id:
     Type: String
-    Description: Public Subnet 1 ID
-  PublicSubnet2Id:
+    Description: Private Subnet 1 ID
+  PrivateSubnet2Id:
     Type: String
-    Description: Public Subnet 2 ID
+    Description: Private Subnet 2 ID
   FrontendAutoScalingSecurityGroupId:
     Type: String
     Description: Load Balancer Security Group ID
@@ -22,6 +22,27 @@ Parameters:
     Description: DNS name of the private load balancer
 
 Resources:
+  SSMIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      RoleName: FrontendSSMRole
+
+  SSMIAMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref SSMIAMRole
+      InstanceProfileName: FrontendSSMInstanceProfile
+
   FrontendLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
@@ -31,6 +52,8 @@ Resources:
         KeyName: !Ref KeyName
         SecurityGroupIds:
           - !Ref FrontendAutoScalingSecurityGroupId
+        IamInstanceProfile:
+          Name: !Ref SSMIAMInstanceProfile
         UserData: !Base64
           Fn::Sub: |
             #!/bin/bash
@@ -80,8 +103,8 @@ Resources:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       VPCZoneIdentifier:
-        - !Ref PublicSubnet1Id
-        - !Ref PublicSubnet2Id
+        - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
       LaunchTemplate:
         LaunchTemplateId: !Ref FrontendLaunchTemplate
         Version: !GetAtt FrontendLaunchTemplate.LatestVersionNumber
@@ -107,3 +130,4 @@ Outputs:
     Value: !Ref FrontendAutoScalingGroup
     Export:
       Name: FrontendAutoScalingGroupName
+

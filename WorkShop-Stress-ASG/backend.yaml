@@ -41,6 +41,8 @@ Resources:
             Principal:
               Service: ec2.amazonaws.com
             Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
       Policies:
         - PolicyName: SSMAccess
           PolicyDocument:
@@ -89,6 +91,20 @@ Resources:
             echo "${IndexHTMLContent}" > /usr/share/nginx/html/index.html
             service nginx start
             chkconfig nginx on
+
+            # Creating Stress:
+            echo "Installing and running CPU stress script..."
+            
+            # Install stress if not already installed
+            if ! command -v stress &> /dev/null
+            then
+                sudo yum install -y epel-release
+                sudo yum install -y stress
+            fi
+
+            # Stress the CPU
+            echo "Stressing the CPU..."
+            stress --cpu 1 --timeout 600 # Stress 1 CPU core for 10 minutes
         TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -118,6 +134,56 @@ Resources:
           Value: BackendASG
           PropagateAtLaunch: true
 
+  ScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref BackendAutoScalingGroup
+      PolicyType: SimpleScaling
+      AdjustmentType: ChangeInCapacity
+      ScalingAdjustment: 1
+
+  ScaleDownPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref BackendAutoScalingGroup
+      PolicyType: SimpleScaling
+      AdjustmentType: ChangeInCapacity
+      ScalingAdjustment: -1
+
+  CPUAlarmHigh:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: "Alarm if CPU utilization is greater than 60% for 5 minutes"
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref BackendAutoScalingGroup
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 60
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+        - !Ref ScaleUpPolicy
+
+  CPUAlarmLow:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: "Alarm if CPU utilization is less than 20% for 5 minutes"
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref BackendAutoScalingGroup
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 20
+      ComparisonOperator: LessThanThreshold
+      AlarmActions:
+        - !Ref ScaleDownPolicy
+
 Outputs:
   BackendInstanceProfile:
     Value: !Ref BackendInstanceProfile
@@ -135,3 +201,4 @@ Outputs:
     Value: !Ref BackendAutoScalingGroup
     Export:
       Name: BackendAutoScalingGroup
+
