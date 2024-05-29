@@ -47,7 +47,7 @@ Resources:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateData:
-        ImageId: ami-0cc9838aa7ab1dce7 # Specify your frontend AMI ID
+        ImageId: ami-00beae93a2d981137 # Specify your frontend AMI ID
         InstanceType: t2.micro # Adjust instance type as needed
         KeyName: !Ref KeyName
         SecurityGroupIds:
@@ -130,4 +130,3 @@ Outputs:
     Value: !Ref FrontendAutoScalingGroup
     Export:
       Name: FrontendAutoScalingGroupName
-
